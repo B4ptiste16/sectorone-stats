@@ -6,7 +6,7 @@
 //   STATS_DEMO=1 node build.cjs   made-up data, to preview the design
 //
 // Credentials (never committed):
-//   FIREBASE_SERVICE_ACCOUNT  JSON text (GitHub Actions secret) or file ~/.sectorone-service-account.json
+//   FIREBASE_SERVICE_ACCOUNT  JSON text (GitHub Actions secret) or file ~/.sectorone-stats-ro.json
 //   STATS_GH_TOKEN            optional PAT with push access to the repo, for traffic graphs
 //   SHOW_COMMENTS=1           also publish rating comments (anonymous) on the public page
 //   STATS_PASSWORD            secret, or file ~/.sectorone-stats-password.txt. Encrypts the page and
@@ -58,7 +58,7 @@ function admin() {
   const mod = [path.join(__dirname, 'node_modules', 'firebase-admin'), path.join(os.homedir(), 'Documents', 'ac-track-forge', 'functions', 'node_modules', 'firebase-admin')].find((p) => fs.existsSync(p));
   if (!mod) throw new Error('firebase-admin not installed (npm install)');
   const a = require(mod);
-  const keyFile = path.join(os.homedir(), '.sectorone-service-account.json');
+  const keyFile = path.join(os.homedir(), '.sectorone-stats-ro.json');
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT || (fs.existsSync(keyFile) ? fs.readFileSync(keyFile, 'utf8') : '');
   if (!raw) throw new Error('No Firebase service account (secret FIREBASE_SERVICE_ACCOUNT)');
   if (!a.apps.length) a.initializeApp({ credential: a.credential.cert(JSON.parse(raw)) });
