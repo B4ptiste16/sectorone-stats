@@ -1,0 +1,5 @@
+node_modules/
+site/
+*service-account*.json
+*password*.txt
+data/history.json

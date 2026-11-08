@@ -1,0 +1,1 @@
+{ "name": "sectorone-stats", "private": true, "version": "1.0.0", "scripts": { "build": "node build.cjs", "serve": "node build.cjs --serve" }, "dependencies": { "chart.js": "4.4.1", "firebase-admin": "12.7.0" } }

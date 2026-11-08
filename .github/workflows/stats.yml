@@ -1,0 +1,38 @@
+name: Build and publish stats
+on:
+  schedule: [{ cron: '17 * * * *' }]   # hourly
+  workflow_dispatch:
+  push: { branches: [main], paths: ['build.cjs', 'package.json', 'package-lock.json', '.github/workflows/stats.yml'] }
+permissions: {}
+concurrency: { group: stats, cancel-in-progress: false }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22 }
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node build.cjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          STATS_PASSWORD: ${{ secrets.STATS_PASSWORD }}
+          STATS_GH_TOKEN: ${{ secrets.STATS_GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHOW_COMMENTS: ${{ vars.SHOW_COMMENTS }}
+      - name: Save encrypted history (so graphs grow over time)
+        run: |
+          git config user.name "stats-bot"; git config user.email "stats-bot@users.noreply.github.com"
+          if [ -d data ]; then git add data; fi
+          git diff --cached --quiet || (git commit -m "stats snapshot" && git pull --rebase -X theirs && git push)
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with: { path: site }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
