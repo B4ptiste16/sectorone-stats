@@ -9,6 +9,7 @@
 //   FIREBASE_SERVICE_ACCOUNT  JSON text (GitHub Actions secret) or file ~/.sectorone-stats-ro.json
 //   STATS_GH_TOKEN            optional PAT with push access to the repo, for traffic graphs
 //   SHOW_COMMENTS=1           also publish rating comments (anonymous) on the public page
+//   SHOW_EMAILS=1             show real emails instead of "User N" (still only inside the encrypted page)
 //   STATS_PASSWORD            secret, or file ~/.sectorone-stats-password.txt. Encrypts the page and
 //                             data/history.enc.json. Without it the public build holds NO data at all.
 const fs = require('fs'), os = require('os'), path = require('path'), http = require('http'), crypto = require('crypto');
@@ -118,7 +119,7 @@ function updateHistory(h, dl, fb) {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function render({ dl, fb, tr, history, events, errors }) {
   const pub = !PRIVATE;
-  const who = (e, n) => (pub || !e ? `User ${n || '?'}` : e);
+  const who = (e, n) => ((pub && !process.env.SHOW_EMAILS) || !e ? `User ${n || '?'}` : e);
   const payload = {
     dl, history, events: events.slice(0, 1000), tr, errors,
     accounts: fb ? fb.accounts.map((x) => x.at) : null,

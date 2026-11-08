@@ -21,6 +21,7 @@ jobs:
           STATS_GH_TOKEN: ${{ secrets.STATS_GH_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHOW_COMMENTS: ${{ vars.SHOW_COMMENTS }}
+          SHOW_EMAILS: ${{ vars.SHOW_EMAILS }}
       - name: Save encrypted history (so graphs grow over time)
         run: |
           git config user.name "stats-bot"; git config user.email "stats-bot@users.noreply.github.com"
