@@ -10,6 +10,7 @@
 //   STATS_GH_TOKEN            optional PAT with push access to the repo, for traffic graphs
 //   SHOW_COMMENTS=1           also publish rating comments (anonymous) on the public page
 //   SHOW_EMAILS=1             show real emails instead of "User N" (still only inside the encrypted page)
+//   site/public.json          NOT encrypted, on purpose: only { tracks, live, updated }, for the count on sectorone.web.app
 //   STATS_PASSWORD            secret, or file ~/.sectorone-stats-password.txt. Encrypts the page and
 //                             data/history.enc.json. Without it the public build holds NO data at all.
 const fs = require('fs'), os = require('os'), path = require('path'), http = require('http'), crypto = require('crypto');
@@ -162,7 +163,8 @@ td,th{padding:6px 8px 6px 0;border-top:1px solid var(--line)}td.r,th.r{text-alig
  <div class=card><h2>Downloads per release</h2><p class=mut>total per version</p><div class=chart><canvas id=cRel></canvas></div></div>
  <div class=card><h2>Accounts</h2><p class=mut>total, and new per day</p><div class=chart><canvas id=cAcc></canvas></div></div>
  <div class=card><h2>Active accounts</h2><p class=mut>used the app in the last 7 days, per daily snapshot</p><div class=chart><canvas id=cAct></canvas></div></div>
- <div class=card><h2>Time in the app</h2><p class=mut>total hours, and sessions</p><div class=chart><canvas id=cMin></canvas></div></div>
+ <div class=card><h2>App usage per day</h2><p class=mut>hours all users spent in the app each day (from the daily snapshots)</p><div class=chart><canvas id=cUse></canvas></div></div>
+ <div class=card><h2>Total time in the app</h2><p class=mut>running total of hours, and sessions</p><div class=chart><canvas id=cMin></canvas></div></div>
  <div class=card><h2>Tracks and exports</h2><p class=mut>cumulative, all accounts</p><div class=chart><canvas id=cTr></canvas></div></div>
  <div class=card><h2>How long people use it</h2><p class=mut>accounts by total time</p><div class=chart><canvas id=cHist></canvas></div></div>
  <div class=card><h2>App versions in use</h2><p class=mut>accounts by last version seen</p><div class=chart><canvas id=cVer></canvas></div></div>
@@ -204,6 +206,8 @@ if(U){
  {const by={};D.accounts.forEach(t=>by[dayOf(t)]=(by[dayOf(t)]||0)+1);const ds=Object.keys(by).sort();let r=0;
   mk('cAcc',{data:{labels:ds,datasets:[{type:'bar',label:'New',data:ds.map(d=>by[d]),backgroundColor:col('--c3')+'cc'},line('Total',ds.map(d=>r+=by[d]),col('--c2'),{type:'line',yAxisID:'y1'})]},options:{scales:{y:{beginAtZero:true,ticks:{precision:0}},y1:{position:'right',grid:{display:false},beginAtZero:true}}}});}
  mk('cAct',{type:'line',data:{labels:H.map(s=>s.date),datasets:[line('Active accounts',H.map(s=>s.active??null),col('--c3'),{fill:true,spanGaps:true})]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+ {const dd=[],hh=[];for(let i=1;i<H.length;i++){if(H[i].minutes==null||H[i-1].minutes==null)continue;const days=Math.max(1,Math.round((new Date(H[i].date)-new Date(H[i-1].date))/864e5));dd.push(H[i].date);hh.push(+(Math.max(0,H[i].minutes-H[i-1].minutes)/60/days).toFixed(2));}
+  mk('cUse',{type:'bar',data:{labels:dd,datasets:[{label:'Hours that day',data:hh,backgroundColor:col('--acc')+'cc'}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});}
  mk('cMin',{data:{labels:H.map(s=>s.date),datasets:[line('Hours in app',H.map(s=>s.minutes==null?null:+(s.minutes/60).toFixed(1)),col('--acc'),{type:'line',fill:true,spanGaps:true}),line('Sessions',H.map(s=>s.sessions??null),col('--c4'),{type:'line',yAxisID:'y1',spanGaps:true})]},options:{scales:{y:{beginAtZero:true},y1:{position:'right',grid:{display:false},beginAtZero:true}}}});
  mk('cTr',{type:'line',data:{labels:H.map(s=>s.date),datasets:[line('Tracks created',H.map(s=>s.tracks??null),col('--c2'),{spanGaps:true}),line('Exports',H.map(s=>s.exports??null),col('--c4'),{spanGaps:true})]},options:{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
  {const b=[['<10 min',0,10],['10-30',10,30],['30-60',30,60],['1-3 h',60,180],['3-10 h',180,600],['10 h+',600,1e9]];
@@ -215,7 +219,7 @@ if(U){
  const rows=[...U].sort((a,b)=>b.minutes-a.minutes);$('usageSub').textContent=U.length+' accounts with usage, most active first';
  $('usageT').innerHTML='<tr><th>Account</th><th class=r>Time</th><th class=r>Sessions</th><th class=r>Tracks</th><th class=r>Exports</th><th>Version</th><th class=r>Last used</th></tr>'+rows.map(u=>'<tr><td>'+e(u.who)+'</td><td class=r>'+hm(u.minutes)+'</td><td class=r>'+u.sessions+'</td><td class=r>'+u.tracks+'</td><td class=r>'+u.exports+'</td><td>v'+e(u.version)+'</td><td class=r>'+(u.last?new Date(u.last).toLocaleDateString('en-GB'):'-')+'</td></tr>').join('');
  $('fbList').innerHTML=D.ratings.map(x=>'<div class=fb><span class=st>'+'★'.repeat(x.stars)+'<span class=off>'+'★'.repeat(5-x.stars)+'</span></span> <span class=mut>'+e(x.who)+' · v'+e(x.version)+' · '+(x.at?new Date(x.at).toLocaleDateString('en-GB'):'')+'</span>'+(x.text?'<div>'+e(x.text)+'</div>':'')+'</div>').join('')||'<span class=mut>None yet</span>';
-}else{['cAcc','cAct','cMin','cTr','cHist','cVer','cRate'].forEach(i=>$(i).closest('.card').remove());$('usageT').closest('.card').remove();$('fbList').closest('.card').remove();}
+}else{['cAcc','cAct','cUse','cMin','cTr','cHist','cVer','cRate'].forEach(i=>$(i).closest('.card').remove());$('usageT').closest('.card').remove();$('fbList').closest('.card').remove();}
 if(D.tr){const T=D.tr;mk('cTraf',{type:'line',data:{labels:T.views.map(x=>x[0]),datasets:[line('Views',T.views.map(x=>x[1]),col('--acc')),line('Unique visitors',T.views.map(x=>x[2]),col('--c3')),line('Clones',(T.clones||[]).map(x=>x[1]),col('--c2'))]},options:{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});}
 else $('trafficCard').remove();
 }
@@ -235,6 +239,11 @@ async function collect() {
   const pw = password(), h = readHistory(pw), before = JSON.stringify(h);
   const [dl, fb, tr] = await Promise.all([downloads(), firebase().catch((e) => { errors.push('Database: ' + e.message); return null; }), traffic().catch((e) => { errors.push('Traffic: ' + e.message); return null; })]);
   updateHistory(h, dl, fb);
+  if (fb && !SERVE) {
+    const recent = Date.now() - 15 * 60e3;
+    fs.mkdirSync(OUT, { recursive: true });
+    fs.writeFileSync(path.join(OUT, 'public.json'), JSON.stringify({ tracks: fb.usage.reduce((s, x) => s + x.tracks, 0), live: fb.usage.filter((x) => x.last && new Date(x.last) > recent).length, updated: new Date().toISOString() }));
+  }
   // only when something changed: sealing is random, so it would otherwise commit every hour
   if (!SERVE && JSON.stringify(h) !== before) { fs.mkdirSync(path.dirname(HISTORY), { recursive: true }); fs.writeFileSync(HISTORY, JSON.stringify(seal(JSON.stringify(h), pw))); }
   return { dl, fb, tr, history: h.snapshots, events: h.events, errors };
