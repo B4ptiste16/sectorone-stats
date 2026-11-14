@@ -115,6 +115,7 @@ function readHistory(pw) {
   return JSON.parse(unseal(JSON.parse(fs.readFileSync(HISTORY, 'utf8')), pw));
 }
 function updateHistory(h, dl, fb) {
+  h.store = h.store || [];
   const first = !Object.keys(h.counts).length;
   for (const x of dl) {
     const was = h.counts[x.tag];
@@ -135,11 +136,11 @@ function updateHistory(h, dl, fb) {
 
 // ---------- render ----------
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function render({ dl, fb, tr, history, events, errors }) {
+function render({ dl, fb, tr, history, events, errors, store }) {
   const pub = !PRIVATE;
   const who = (e, n) => ((pub && !process.env.SHOW_EMAILS) || !e ? `User ${n || '?'}` : e);
   const payload = {
-    dl, history, events: events.slice(0, 1000), tr, errors,
+    dl, history, events: events.slice(0, 1000), tr, errors, store: store || [],
     accounts: fb ? fb.accounts.map((x) => ({ at: x.at, plan: x.plan, paidAt: x.paidAt })) : null,
     usage: fb ? fb.usage.map((x) => ({ who: who(x.email, x.n), ...x, email: undefined })) : null,
     ratings: fb ? fb.ratings.map((x) => ({ who: who(x.email, 0), stars: x.stars, version: x.version, at: x.at, text: (PRIVATE || process.env.SHOW_COMMENTS) ? x.text : '' })) : null,
@@ -177,9 +178,9 @@ td,th{padding:6px 8px 6px 0;border-top:1px solid var(--line)}td.r,th.r{text-alig
 <div id=errs class="mut err"></div>
 <p class=mut style="margin:0 0 12px">Every chart: <b>Per day</b> shows what happened each day, <b>Total</b> the running total. The number on each point is that day's value. Gifted Premium (launch accounts) is never counted as a subscription.</p>
 <div class=grid>
- <div class=card><h2>Downloads</h2><p class=mut>installer downloads (GitHub counts auto-updates too)</p><div class=chart><canvas id=cDl></canvas></div></div>
+ <div class=card><h2>Website downloads</h2><p class=mut>installer downloads from the website / GitHub (counts auto-updates too; Microsoft Store downloads are separate)</p><div class=chart><canvas id=cDl></canvas></div></div>
  <div class=card><h2>Accounts created</h2><p class=mut>new sign-ups</p><div class=chart><canvas id=cAcc></canvas></div></div>
- <div class=card><h2>Download → account conversion</h2><p class=mut>accounts created ÷ downloads. Per day: that day only. Total: all accounts ÷ all downloads so far</p><div class=chart><canvas id=cConv></canvas></div></div>
+ <div class=card><h2>Website download → account conversion</h2><p class=mut>accounts created ÷ website downloads (Microsoft Store downloads are not included). Per day: that day only. Total: all accounts ÷ all downloads so far</p><div class=chart><canvas id=cConv></canvas></div></div>
  <div class=card><h2>Premium subscriptions</h2><p class=mut id=subSub>paid only: bought once (£11.99) and monthly (£1.99), gifts excluded</p><div class=chart><canvas id=cSub></canvas></div></div>
  <div class="card wide"><h2>Time spent in the app</h2><p class=mut>hours of active use, all users and split by plan (the split starts the day this version of the page went live)</p><div class="chart tall"><canvas id=cUse></canvas></div></div>
  <div class="card wide"><h2>Paying vs gifted vs free users</h2><p class=mut>how much each group uses the app</p><div style="overflow:auto"><table id=planT></table></div></div>
@@ -237,7 +238,8 @@ const dlBase=totDl-dlDaily.reduce((s,v)=>s+v,0), dlTotal=cum(dlDaily,dlBase);
 dual('cDl',dlDays,[{label:'Downloads',color:col('--acc'),daily:dlDaily,total:dlTotal}]);
 
 const plans={once:'Premium (once)',monthly:'Premium (monthly)',gift:'Launch gift',free:'Free'};
-const kp=[['Downloads',totDl,'']];
+const ST=(D.store||[]),stLast=ST[ST.length-1],stPrev=ST.length>1?ST[ST.length-2]:null;
+const kp=[['Website downloads',totDl,'installer from sectorone.web.app / GitHub'],['Microsoft Store downloads',stLast?stLast.n:'–',stLast?'as of '+stLast.date+(stPrev?' · +'+(stLast.n-stPrev.n)+' since '+stPrev.date:''):'not entered yet']];
 if(A){
  // ---- accounts created per day (from each account's creation date: the whole history)
  const accDay={};A.forEach(a=>{const k=dayOf(a.at);accDay[k]=(accDay[k]||0)+1});
@@ -255,7 +257,7 @@ if(A){
  const nOnce=paid.filter(a=>a.plan==='once').length,nMon=paid.filter(a=>a.plan==='monthly').length;
  $('subSub').textContent='paid only, gifts excluded: '+nOnce+' bought once (£11.99), '+nMon+' monthly (£1.99)';
  const acc=A.length,conv=totDl?100*acc/totDl:0;
- kp.push(['Accounts',acc,'<i>+'+accDaily.slice(-7).reduce((s,v)=>s+v,0)+' in 7 days</i>'],['Download → account',pct(conv),'all time'],
+ kp.push(['Accounts',acc,'<i>+'+accDaily.slice(-7).reduce((s,v)=>s+v,0)+' in 7 days</i>'],['Website download → account',pct(conv),'website downloads only'],
   ['Paid Premium',nOnce+nMon,nOnce+' once · '+nMon+' monthly'],['Est. revenue',GBP(nOnce*11.99+nMon*1.99),'gross, first payments']);
 }
 if(U){
@@ -317,7 +319,7 @@ async function collect() {
   }
   // only when something changed: sealing is random, so it would otherwise commit every hour
   if (!SERVE && JSON.stringify(h) !== before) { fs.mkdirSync(path.dirname(HISTORY), { recursive: true }); fs.writeFileSync(HISTORY, JSON.stringify(seal(JSON.stringify(h), pw))); }
-  return { dl, fb, tr, history: h.snapshots, events: h.events, errors };
+  return { dl, fb, tr, history: h.snapshots, events: h.events, errors, store: h.store || [] };
 }
 // demo returns history as a plain array, real returns snapshots; render() handles both
 async function build() {
@@ -325,7 +327,17 @@ async function build() {
   return render(d);
 }
 const LOCKED = `<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content="noindex"><title>SectorOne stats</title><body style="background:#0b0c10;color:#8a8f9c;font:15px system-ui;text-align:center;padding-top:20vh">Not available.</body></html>`;
-if (require.main === module) (async () => {
+// node build.cjs --store <total> [YYYY-MM-DD]: record the Microsoft Store acquisitions total (Partner Center > Analytics; there is no public API)
+async function setStore() {
+  const i = process.argv.indexOf('--store'), n = Number(process.argv[i + 1]), date = /^\d{4}-\d\d-\d\d$/.test(process.argv[i + 2] || '') ? process.argv[i + 2] : day(Date.now());
+  if (!Number.isFinite(n) || n < 0) throw new Error('usage: node build.cjs --store <total acquisitions> [YYYY-MM-DD]');
+  const pw = password(); if (!pw) throw new Error('no STATS_PASSWORD / local password');
+  const h = readHistory(pw); h.store = (h.store || []).filter((x) => x.date !== date).concat({ date, n }).sort((a, b) => a.date.localeCompare(b.date));
+  fs.mkdirSync(path.dirname(HISTORY), { recursive: true }); fs.writeFileSync(HISTORY, JSON.stringify(seal(JSON.stringify(h), pw)));
+  console.log('Microsoft Store total', n, 'on', date);
+}
+if (require.main === module && process.argv.includes('--store')) setStore().catch((e) => { console.error(e.message); process.exit(1); });
+else if (require.main === module) (async () => {
   if (!SERVE && !password()) {
     // Fail closed: no password means no data is collected or published.
     fs.mkdirSync(OUT, { recursive: true });
